@@ -1,0 +1,154 @@
+Reproducible Data - Assignment One
+===================================
+
+###Load required packages
+```{r}
+	library(knitr)
+  library(plyr)
+```
+
+###Set the default of echo throughout the document
+```{r}
+	opts_chunk$set(echo = TRUE)
+```
+###Read and process the data
+```{r}
+	loadData <- function(dataURL="", destF="default.csv", method = NULL){
+  		if(!file.exists(destF)){
+           		temp <- tempfile()
+            	download.file(dataURL, temp, method = method)
+            	unzip(temp, destF)
+            	unlink(temp)
+        	}else{
+            	message("Data already downloaded.")
+        	}
+		}
+
+	dataURL <-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+	loadData(dataURL, "activity.csv")
+
+
+	data <- read.csv("activity.csv", header = TRUE, sep = ',', colClasses = c("numeric", "character",
+                                                                          "integer"))
+	data$day <- weekdays(as.Date(data$date))
+	data$DateTime<- as.POSIXct(data$date, format="%Y-%m-%d")
+```
+###Check the data
+```{r}
+	str(data)
+	head(data)
+```
+
+#Histogram of the total number of steps taken each day
+
+###Total steps per day
+```{r}
+	sumTable <- aggregate(data$steps ~ data$date, FUN=sum, )
+	colnames(sumTable)<- c("Date", "Steps")
+```
+###Histogram showing total steps per day
+```{r}
+	hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Steps per day", col="yellow")
+```
+
+#Mean and median number of steps taken each day
+
+###Show the mean of steps
+```{r}	
+	as.integer(mean(sumTable$Steps))
+```
+###Show the median of steps
+```{r}
+	as.integer(median(sumTable$Steps))
+```
+
+#Time series plot of the average number of steps taken
+###Load required packages
+```{r}
+library(plyr)
+library(ggplot2)
+```
+###Recall data and remove NAs
+```{r}	
+	clean <- data[!is.na(data$steps),]
+```
+###Generate average number of steps per interval
+```{r}
+	intervalTable <- ddply(clean, .(interval), summarize, Avg = mean(steps))
+``` 
+###Create a line plot showing the average number of steps per interval
+```{r}
+	p <- ggplot(intervalTable, aes(x=interval, y=Avg), xlab = "Interval", ylab="Average Number of Steps")
+	p + geom_line()+xlab("Interval")+ylab("Average Number of Steps")+ggtitle("Average Number of Steps per interval")
+```
+
+#The 5-minute interval that, on average, contains the maximum number of steps
+
+###Find which interval has the highest average number of steps
+```{r}
+	maxSteps <- max(intervalTable$Avg)
+	intervalTable[intervalTable$Avg==maxSteps,1]
+```
+
+#Describe and show a strategy for imputing missing data
+
+###Find the total number of NAs in the original data
+```{r}
+	nrow(data[is.na(data$steps),])
+```
+###Replace NAs using the average 5-minute interval
+```{r}
+	avgTable <- ddply(clean, .(interval, day), summarize, Avg = mean(steps))
+	nadata<- data[is.na(data$steps),]
+	newdata<-merge(nadata, avgTable, by=c("interval", "day"))
+```
+###Reorder the new substituted data in the same format as the clean data
+```{r}
+	newdata2<- newdata[,c(6,4,1,2,5)]
+	colnames(newdata2)<- c("steps", "date", "interval", "day", "DateTime")
+```
+###Merge the NA averages and non NA data together
+```{r}	
+	mergeData <- rbind(clean, newdata2)
+```
+###Create sum of steps per date for comparison
+```{r}	
+	sumTable2 <- aggregate(mergeData$steps ~ mergeData$date, FUN=sum, )
+	colnames(sumTable2)<- c("Date", "Steps")
+```
+###Mean of Steps without NAs
+```{r}	
+	as.integer(mean(sumTable2$Steps))
+```
+###Median of Steps without NAs
+```{r}
+	as.integer(median(sumTable2$Steps))
+```
+#Histogram of the total number of steps taken each day after missing values are imputed
+```{r}	
+	hist(sumTable2$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day", col="green")
+	hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day", col="purple", add=T)
+	legend("topright", c("Imputed", "NA"), fill=c("green", "purple") )
+```
+
+#Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+
+###Load the required package
+```{r}
+library(lattice) 
+```
+###Create new category based on the days of the week
+```{r}
+	mergeData$DayCategory <- ifelse(mergeData$day %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+```
+
+###Summarize data by interval and type of day
+```{r}
+	intervalTable2 <- ddply(mergeData, .(interval, DayCategory), summarize, Avg = mean(steps))
+```
+###Plot data in a panel plot
+```{r}	
+	xyplot(Avg~interval|DayCategory, data=intervalTable2, type="l",  layout = c(1,2),
+	       main="Average steps per 5-minute interval across weekdays and weekends",
+	       ylab="Average Number of Steps", xlab="Interval")
+```
